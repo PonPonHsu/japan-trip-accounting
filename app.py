@@ -85,7 +85,7 @@ if 'processing' not in st.session_state:
 CONSUMERS = ["三人分", "金城舞", "阿鵬", "小君", "阿杏"]
 PAYMENT_METHODS = ["現金", "小君卡", "阿鵬卡"]
 
-st.title("🧾 旅費拆帳完全體 (雲端批次版)")
+st.title("🧾 旅費拆帳")
 
 tab1, tab2, tab3 = st.tabs(["📸 批次收據辨識", "✍️ 手動輸入", "📊 雲端帳單結算"])
 
