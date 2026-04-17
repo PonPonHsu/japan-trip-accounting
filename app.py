@@ -12,7 +12,7 @@ st.set_page_config(page_title="日本旅行記帳系統", page_icon="🧾", layo
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     # 統一使用最標準的 flash 模型，確保相容性
-    model = genai.GenerativeModel('gemini-1.5-flash') 
+    model = genai.GenerativeModel('gemini-2.5-flash') 
 except Exception as e:
     st.error("⚠️ 尚未設定 Gemini API Key，請至 Streamlit Secrets 中設定。")
 
