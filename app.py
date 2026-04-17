@@ -123,7 +123,7 @@ with tab1:
                     progress_bar = st.progress(0)
                     
                     for i, (f_id, f_name) in enumerate(selected_file_ids):
-                        with st.spinner(f"正在處理 ({i+1}/{len(selected_file_ids)}): {f_name}..."):
+                        with st.spinner(f"正在處理 ({i+1}/{len(selected_file_ids)}): {f_name}... (為避免 API 限制，每張約需 15 秒)"):
                             img_data = download_file(f_id)
                             img = Image.open(io.BytesIO(img_data))
                             
@@ -139,6 +139,10 @@ with tab1:
                             st.session_state.batch_results.append(result)
                             
                         progress_bar.progress((i + 1) / len(selected_file_ids))
+                        
+                        # 【新增防呆煞車機制】如果不是最後一張收據，就強制程式休息 15 秒
+                        if i < len(selected_file_ids) - 1:
+                            time.sleep(15) 
                     
                     st.success("✅ 所有檔案辨識完成！請在下方分配明細。")
 
