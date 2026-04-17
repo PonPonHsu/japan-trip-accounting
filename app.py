@@ -122,4 +122,99 @@ with tab1:
                     st.session_state.batch_results = [] # 清空舊結果
                     progress_bar = st.progress(0)
                     
-                    for i, (f_id, f_name) in
+                    for i, (f_id, f_name) in enumerate(selected_file_ids):
+                        with st.spinner(f"正在處理 ({i+1}/{len(selected_file_ids)}): {f_name}..."):
+                            img_data = download_file(f_id)
+                            img = Image.open(io.BytesIO(img_data))
+                            
+                            prompt = """
+                            你是一個專業的日翻中記帳助理。請辨識收據，並回傳純 JSON 格式：
+                            1. "payment_method": 判斷「現金」或「信用卡」。
+                            2. "items": 陣列，包含 original_name (日文), translated_name (中文), price (數字)。
+                            """
+                            response = model.generate_content([prompt, img])
+                            txt = response.text.strip().removeprefix('```json').removesuffix('```').strip()
+                            result = json.loads(txt)
+                            result['file_name'] = f_name # 紀錄檔名
+                            st.session_state.batch_results.append(result)
+                            
+                        progress_bar.progress((i + 1) / len(selected_file_ids))
+                    
+                    st.success("✅ 所有檔案辨識完成！請在下方分配明細。")
+
+    except Exception as e:
+        st.error(f"雲端存取失敗：{e}")
+
+    # 4. 顯示批次結果並分配
+    if st.session_state.batch_results:
+        st.divider()
+        st.subheader("🛒 辨識結果與存檔")
+        
+        with st.form("batch_save_form"):
+            all_rows = []
+            for idx, res in enumerate(st.session_state.batch_results):
+                st.markdown(f"**📄 檔案：{res['file_name']}**")
+                
+                # 付款方式預設判定
+                def_method = "小君卡" if "卡" in res.get("payment_method", "") else "現金"
+                method = st.selectbox(f"付款方式 ({idx})", PAYMENT_METHODS, index=PAYMENT_METHODS.index(def_method), key=f"method_{idx}")
+                payer = "阿鵬" if method == "阿鵬卡" else "小君"
+                
+                for j, item in enumerate(res.get('items', [])):
+                    c1, c2 = st.columns([2, 1])
+                    with c1:
+                        st.write(f"· {item['translated_name']} (¥{item['price']})")
+                    with c2:
+                        cons = st.selectbox("誰的？", CONSUMERS, key=f"cons_{idx}_{j}", label_visibility="collapsed")
+                    
+                    all_rows.append([datetime.now().strftime("%Y-%m-%d"), item['translated_name'], item['price'], method, payer, cons])
+                st.write("---")
+            
+            if st.form_submit_button("✅ 全部存入雲端試算表", use_container_width=True):
+                _, sheet = sync_data()
+                sheet.append_rows(all_rows)
+                st.success(f"已成功同步 {len(all_rows)} 筆明細至 Google Sheets！")
+                st.session_state.batch_results = [] # 清空結果
+
+# === 分頁 2 & 3 維持先前功能 (手動輸入、雲端結算) ===
+with tab2:
+    with st.form("manual"):
+        m_item = st.text_input("項目")
+        m_price = st.number_input("金額", min_value=0)
+        m_method = st.selectbox("付款", PAYMENT_METHODS)
+        m_cons = st.selectbox("對象", CONSUMERS)
+        if st.form_submit_button("💾 存入雲端"):
+            if m_item:
+                _, sheet = sync_data()
+                sheet.append_row([datetime.now().strftime("%Y-%m-%d"), m_item, m_price, m_method, "阿鵬" if m_method=="阿鵬卡" else "小君", m_cons])
+                st.success("已存入！")
+
+with tab3:
+    if st.button("🔄 刷新資料"): st.rerun()
+    try:
+        df, sheet = sync_data()
+        if not df.empty:
+            # 統計個人應付
+            totals = {"阿鵬": 0, "小君": 0, "阿杏": 0}
+            for _, r in df.iterrows():
+                p, c = r["日幣金額"], r["消費者"]
+                if c == "三人分":
+                    for k in totals: totals[k] += p/3
+                elif c == "金城舞":
+                    totals["阿鵬"] += p/2; totals["小君"] += p/2
+                elif c in totals:
+                    totals[c] += p
+            
+            c1, c2, c3 = st.columns(3)
+            c1.metric("阿鵬", f"¥{int(totals['阿鵬'])}")
+            c2.metric("小君", f"¥{int(totals['小君'])}")
+            c3.metric("阿杏", f"¥{int(totals['阿杏'])}")
+            st.divider()
+            for index, row in df.iterrows():
+                with st.container(border=True):
+                    c_i, c_d = st.columns([4, 1])
+                    with c_i: st.markdown(f"**{row['品項']}** (¥{row['日幣金額']})\n\n{row['日期']} | {row['消費者']}")
+                    with c_d:
+                        if st.button("🗑️", key=f"del_{index}"): confirm_delete_dialog(index, row['品項'], sheet)
+    except Exception as e:
+        st.error(f"連線失敗：{e}")
