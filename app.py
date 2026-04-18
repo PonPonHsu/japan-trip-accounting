@@ -134,18 +134,26 @@ with tab1:
                     for i, (f_id, f_name) in enumerate(selected_files):
                         with st.spinner(f"正在處理 ({i+1}/{len(selected_files)}): {f_name}..."):
                             img_data = download_file(f_id)
-                            img = Image.open(io.BytesIO(img_data))
                             
+                            # 【新增】判斷檔案類型：如果是 PDF，就直接以文件格式傳給 AI；如果是圖片，才用 Image 打開
+                            if f_name.lower().endswith('.pdf'):
+                                input_data = {"mime_type": "application/pdf", "data": img_data}
+                            else:
+                                input_data = Image.open(io.BytesIO(img_data))
+                            
+                            # 【微調咒語】提醒 AI 這可能包含多張收據
                             prompt = """
-                            你是一個專業的日翻中記帳助理。請辨識收據，並回傳純 JSON 格式：
-                            1. "payment_method": 判斷「現金」或「信用卡」。
-                            2. "items": 陣列，包含 original_name (日文), translated_name (翻譯), price (數字)。
+                            你是一個專業的日翻中記帳助理。這個檔案可能是一張或「多張合併」的收據。
+                            請仔細辨識檔案中【所有】的收據，並將結果合併回傳純 JSON 格式：
+                            1. "payment_method": 判斷整體主要是「現金」或「信用卡」。
+                            2. "items": 陣列，包含所有收據上的每一筆消費明細。必須包含 original_name (日文原文), translated_name (翻譯), price (純數字)。
                             
                             【重要翻譯規則】：
-                            - translated_name 必須翻譯成「繁體中文」，且符合台灣用語。
-                            - 如果遇到無法辨識的品牌名或專有名詞，請直接使用「英文讀音 (Romaji)」作為 translated_name，不可保留日文假名。
+                            - translated_name 必須翻譯成「繁體中文」，且符合台灣人的日常用語。
+                            - 如果遇到無法直譯的專有名詞或品牌名稱，請直接使用「英文讀音 (Romaji)」作為 translated_name，不可保留日文假名。
+                            請嚴格遵守 JSON 格式，只需回傳純 JSON，不要包含任何 Markdown 標記 (如 ```json) 或說明文字。
                             """
-                            response = model.generate_content([prompt, img])
+                            response = model.generate_content([prompt, input_data])
                             txt = response.text.strip().removeprefix('```json').removesuffix('```').strip()
                             result = json.loads(txt)
                             result['file_name'] = f_name
