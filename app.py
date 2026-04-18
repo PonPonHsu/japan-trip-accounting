@@ -117,7 +117,10 @@ with tab1:
                     st.error(f"存檔失敗：{e}")
             else:
                 st.warning("請填寫品項名稱與金額。")
-
+# 臨時測試用：印出所有可用模型
+    if st.button("🔍 召喚照妖鏡 (列出可用模型)"):
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        st.write(available_models)
 # === 分頁 2：批次收據辨識 (支援 PDF 拆頁) ===
 with tab2:
     st.subheader("📂 雲端收據批次處理")
