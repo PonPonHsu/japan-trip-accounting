@@ -15,10 +15,10 @@ import time
 st.set_page_config(page_title="日本旅行記帳系統", page_icon="🧾", layout="centered")
 
 # 【請務必修改此處】你的 Google Sheets 網址
-GSHEET_URL = "https://docs.google.com/spreadsheets/d/你的試算表ID/edit"
+GSHEET_URL = "https://docs.google.com/spreadsheets/d/1kECMoz7jzf-5-PLf9gVZJ4M38_NFFcCID4AILXAtTKk/edit?gid=0#gid=0"
 
 # 【請務必修改此處】Google Drive 總收據資料夾 ID
-DRIVE_ROOT_ID = "你的資料夾ID"
+DRIVE_ROOT_ID = "1PeLDeGLAvcKTYRLIiK-m_AAIKNDGzLll"
 
 # --- 側邊欄設計 (進階導航) ---
 with st.sidebar:
