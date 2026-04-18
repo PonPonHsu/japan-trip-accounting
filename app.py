@@ -81,7 +81,7 @@ def confirm_delete_dialog(row_index, item_name, sheet):
 # --- 初始化 Gemini ---
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel('gemini-flash-latest') 
+    model = genai.GenerativeModel('gemini-1.5-flash')
 except:
     st.error("API Key 設定錯誤")
 
