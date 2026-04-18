@@ -72,7 +72,8 @@ def confirm_delete_dialog(row_index, item_name, sheet):
 # --- 初始化 Gemini ---
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel('gemini-2.5-flash') 
+    # 將 2.5 改成額度超大的 2.0 版本
+    model = genai.GenerativeModel('gemini-2.0-flash') 
 except:
     st.error("API Key 設定錯誤")
 
