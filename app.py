@@ -10,6 +10,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 import io
 import time
+from pypdf import PdfReader, PdfWriter
 
 # --- 基礎設定 ---
 st.set_page_config(page_title="日本旅行記帳系統", page_icon="🧾", layout="centered")
@@ -126,46 +127,64 @@ with tab1:
                 if st.checkbox(f['name'], key=f"check_{f['id']}"):
                     selected_files.append((f['id'], f['name']))
             
-            if selected_files:
+           if selected_files:
                 if st.button(f"🤖 開始辨識 ({len(selected_files)} 個檔案)", use_container_width=True, type="primary"):
                     st.session_state.batch_results = [] 
-                    progress_bar = st.progress(0)
                     
-                    for i, (f_id, f_name) in enumerate(selected_files):
-                        with st.spinner(f"正在處理 ({i+1}/{len(selected_files)}): {f_name}..."):
-                            img_data = download_file(f_id)
-                            
-                            # 【新增】判斷檔案類型：如果是 PDF，就直接以文件格式傳給 AI；如果是圖片，才用 Image 打開
-                            if f_name.lower().endswith('.pdf'):
-                                input_data = {"mime_type": "application/pdf", "data": img_data}
-                            else:
-                                input_data = Image.open(io.BytesIO(img_data))
-                            
-                            # 【微調咒語】提醒 AI 這可能包含多張收據
+                    # 【新增】先將所有任務攤平 (如果是 PDF 就拆成多頁，圖片就維持單張)
+                    task_list = []
+                    for f_id, f_name in selected_files:
+                        img_data = download_file(f_id)
+                        if f_name.lower().endswith('.pdf'):
+                            reader = PdfReader(io.BytesIO(img_data))
+                            for page_num in range(len(reader.pages)):
+                                writer = PdfWriter()
+                                writer.add_page(reader.pages[page_num])
+                                page_bytes = io.BytesIO()
+                                writer.write(page_bytes)
+                                task_list.append({
+                                    "name": f"{f_name} (第 {page_num + 1} 頁)",
+                                    "data": {"mime_type": "application/pdf", "data": page_bytes.getvalue()}
+                                })
+                        else:
+                            task_list.append({
+                                "name": f_name,
+                                "data": Image.open(io.BytesIO(img_data))
+                            })
+                    
+                    # 開始逐一處理拆解後的任務
+                    progress_bar = st.progress(0)
+                    total_tasks = len(task_list)
+                    
+                    st.info(f"系統已將檔案整理為 {total_tasks} 個辨識任務，預計需要 {total_tasks * 15 / 60:.1f} 分鐘，請耐心等候或先去忙其他事！")
+                    
+                    for i, task in enumerate(task_list):
+                        with st.spinner(f"正在處理 ({i+1}/{total_tasks}): {task['name']}..."):
                             prompt = """
-                            你是一個專業的日翻中記帳助理。這個檔案可能是一張或「多張合併」的收據。
-                            請仔細辨識檔案中【所有】的收據，並將結果合併回傳純 JSON 格式：
+                            你是一個專業的日翻中記帳助理。請仔細辨識這張收據，並回傳純 JSON 格式：
                             1. "payment_method": 判斷整體主要是「現金」或「信用卡」。
-                            2. "items": 陣列，包含所有收據上的每一筆消費明細。必須包含 original_name (日文原文), translated_name (翻譯), price (純數字)。
+                            2. "items": 陣列，包含所有消費明細。必須包含 original_name (日文), translated_name (翻譯), price (數字)。
                             
                             【重要翻譯規則】：
-                            - translated_name 必須翻譯成「繁體中文」，且符合台灣人的日常用語。
-                            - 如果遇到無法直譯的專有名詞或品牌名稱，請直接使用「英文讀音 (Romaji)」作為 translated_name，不可保留日文假名。
-                            請嚴格遵守 JSON 格式，只需回傳純 JSON，不要包含任何 Markdown 標記 (如 ```json) 或說明文字。
+                            - translated_name 必須翻譯成「繁體中文」，且符合台灣用語。
+                            - 如果遇到無法辨識的品牌名或專有名詞，請直接使用「英文讀音 (Romaji)」作為 translated_name，不可保留日文假名。
                             """
-                            response = model.generate_content([prompt, input_data])
-                            txt = response.text.strip().removeprefix('```json').removesuffix('```').strip()
-                            result = json.loads(txt)
-                            result['file_name'] = f_name
-                            st.session_state.batch_results.append(result)
+                            try:
+                                response = model.generate_content([prompt, task['data']])
+                                txt = response.text.strip().removeprefix('```json').removesuffix('```').strip()
+                                result = json.loads(txt)
+                                result['file_name'] = task['name']
+                                st.session_state.batch_results.append(result)
+                            except Exception as e:
+                                st.error(f"{task['name']} 辨識失敗，跳過此頁。")
                             
-                        progress_bar.progress((i + 1) / len(selected_files))
+                        progress_bar.progress((i + 1) / total_tasks)
                         
-                        # 每張之間休息 15 秒以符合免費版 API 限制
-                        if i < len(selected_files) - 1:
+                        # 每頁之間強制休息 15 秒
+                        if i < total_tasks - 1:
                             time.sleep(15) 
                     
-                    st.success("✅ 辨識完成！請在下方確認並分配。")
+                    st.success("✅ 所有分頁辨識完成！請在下方確認並分配。")
 
     except Exception as e:
         st.error(f"連線失敗：{e}")
